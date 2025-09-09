@@ -30,11 +30,6 @@ Nota: “N4R2” indica tipicamente 4 MB di Flash e 2 MB di PSRAM.
 - File system SPIFFS per contenuti web
 - I/O a 3.3 V
 
-Se presenti nel core della board, i pin speciali sono:
-
-- `PIN_NEOPIXEL`: pin del NeoPixel onboard
-- `PIN_NEOPIXEL_POWER`: pin di alimentazione NeoPixel (portato HIGH in `setup()` se definito)
-
 ## Struttura del progetto
 
 - `src/main.cpp`: logica firmware (Wi‑Fi, server HTTP, endpoint `/color` e gestione NeoPixel)
