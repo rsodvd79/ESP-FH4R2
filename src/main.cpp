@@ -66,9 +66,6 @@ static bool loadConfig() {
 
 // Onboard RGB NeoPixel (Adafruit QT Py ESP32-S3)
 // Prefer board-defined PIN_NEOPIXEL when available; fallback is a common default.
-#ifndef PIN_NEOPIXEL
-#define PIN_NEOPIXEL 48
-#endif
 static const uint8_t NEOPIXEL_COUNT = 1;
 static Adafruit_NeoPixel pixel(NEOPIXEL_COUNT, 21, NEO_GRB + NEO_KHZ800);
 
@@ -117,6 +114,29 @@ static bool handleFileRead(String path) {
 static void handleRoot() {
   if (!handleFileRead("/")) {
     server.send(404, "text/plain", "index.html non trovato");
+  }
+}
+
+// Upload support
+static File g_uploadFile;
+static String g_uploadName;
+static void handleFileUpload() {
+  HTTPUpload &upload = server.upload();
+  if (upload.status == UPLOAD_FILE_START) {
+    g_uploadName = upload.filename;
+    if (!g_uploadName.startsWith("/")) g_uploadName = "/" + g_uploadName;
+    Serial.printf("Upload start: %s size?\n", g_uploadName.c_str());
+    if (SPIFFS.exists(g_uploadName)) SPIFFS.remove(g_uploadName);
+    g_uploadFile = SPIFFS.open(g_uploadName, "w");
+  } else if (upload.status == UPLOAD_FILE_WRITE) {
+    if (g_uploadFile) g_uploadFile.write(upload.buf, upload.currentSize);
+  } else if (upload.status == UPLOAD_FILE_END) {
+    if (g_uploadFile) g_uploadFile.close();
+    Serial.printf("Upload end: %s (%u bytes)\n", g_uploadName.c_str(), upload.totalSize);
+  } else if (upload.status == UPLOAD_FILE_ABORTED) {
+    Serial.println("Upload aborted");
+    if (g_uploadFile) { g_uploadFile.close(); }
+    if (!g_uploadName.isEmpty() && SPIFFS.exists(g_uploadName)) SPIFFS.remove(g_uploadName);
   }
 }
 
@@ -251,6 +271,33 @@ void setup() {
   server.on("/", HTTP_GET, handleRoot);
   server.on("/index.html", HTTP_GET, handleRoot);
   server.on("/ls", HTTP_GET, handleList);
+  // File management APIs
+  server.on("/api/delete", HTTP_POST, [](){
+    if (!fsMounted) { server.send(500, "application/json", "{\"ok\":false,\"error\":\"fs not mounted\"}"); return; }
+    if (!server.hasArg("path")) { server.send(400, "application/json", "{\"ok\":false,\"error\":\"missing path\"}"); return; }
+    String path = server.arg("path");
+    if (!path.startsWith("/")) path = String("/") + path;
+    if (!SPIFFS.exists(path)) { server.send(404, "application/json", "{\"ok\":false,\"error\":\"not found\"}"); return; }
+    bool ok = SPIFFS.remove(path);
+    server.send(ok ? 200 : 500, "application/json", ok ? "{\"ok\":true}" : "{\"ok\":false}");
+  });
+  server.on("/api/download", HTTP_GET, [](){
+    if (!fsMounted) { server.send(500, "text/plain", "fs not mounted"); return; }
+    if (!server.hasArg("path")) { server.send(400, "text/plain", "missing path"); return; }
+    String path = server.arg("path");
+    if (!path.startsWith("/")) path = String("/") + path;
+    if (!SPIFFS.exists(path)) { server.send(404, "text/plain", "not found"); return; }
+    File file = SPIFFS.open(path, "r");
+    String name = path;
+    int slash = name.lastIndexOf('/');
+    if (slash >= 0 && slash + 1 < (int)name.length()) name = name.substring(slash + 1);
+    server.sendHeader("Content-Disposition", String("attachment; filename=\"") + name + "\"");
+    server.streamFile(file, "application/octet-stream");
+    file.close();
+  });
+  server.on("/upload", HTTP_POST, [](){
+    server.send(200, "application/json", "{\"ok\":true}\n");
+  }, handleFileUpload);
   // Config APIs
   server.on("/api/get_config", HTTP_GET, [](){
     if (!fsMounted) { server.send(500, "application/json", "{\"ok\":false,\"error\":\"fs not mounted\"}"); return; }

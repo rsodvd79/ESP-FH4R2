@@ -36,6 +36,8 @@ Nota: “N4R2” indica tipicamente 4 MB di Flash e 2 MB di PSRAM.
 - `data/index.html`: interfaccia web servita da SPIFFS (color picker + JS)
 - `data/setup.html`: pagina di configurazione rete (carica/salva via API)
 - `data/config.json`: file di configurazione iniziale (usato al primo avvio dopo upload SPIFFS)
+- `data/info.html`: pagina informazioni con visualizzazione di `fsinfo` e `ls`
+- `data/archivio.html`: gestione file su SPIFFS (upload e cancellazione)
 - `platformio.ini`: configurazione PlatformIO (env `adafruit_qtpy_esp32s3_n4r2`, SPIFFS, dipendenze)
 
 ## Build e Upload (PlatformIO)
@@ -93,3 +95,8 @@ La pagina `data/index.html` include:
 L’immagine seguente mostra il pinout della scheda (file incluso nel repo):
 
 ![Pinout](pinout.png)
+- `GET /ls` → restituisce elenco file su SPIFFS (testo). Usato da `info.html`.
+- `GET /fsinfo` → restituisce info spazio usato/total e presenza `index.html` (testo). Usato da `info.html`.
+ - `POST /api/delete` → elimina un file. Body `path=/nomefile` (x-www-form-urlencoded). Usato da `archivio.html`.
+ - `POST /upload` → upload file (multipart/form-data). Usato da `archivio.html`.
+ - `GET /api/download?path=/file` → scarica un file forzando il download (Content-Disposition). Usato da `archivio.html`.

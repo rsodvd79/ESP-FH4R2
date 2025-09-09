@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ESP32-S3 - Archivio SPIFFS</title>
+    <style>
+      html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+      .wrap { min-height: 100%; display: grid; place-items: center; background: #0f172a; color: #e2e8f0; }
+      .card { padding: 2rem 2.5rem; border-radius: 12px; background: #111827; box-shadow: 0 10px 30px rgba(0,0,0,.35); width: min(820px, 95vw); }
+      h1 { margin: 0 0 .25rem; font-size: 1.5rem; }
+      .sub { color: #94a3b8; font-size: .95rem; }
+      .row { display:flex; gap:.75rem; align-items:center; }
+      input[type="file"] { color:#e2e8f0; }
+      button { padding:.5rem .85rem; border-radius:8px; border:1px solid #1f2937; background:#1f2937; color:#e5e7eb; cursor:pointer; }
+      a { color:#60a5fa; }
+      table { width:100%; border-collapse: collapse; margin-top: .5rem; }
+      th, td { text-align:left; padding:.5rem .4rem; border-bottom:1px solid #1f2937; }
+      th { color:#94a3b8; }
+      .right { text-align:right; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1>Archivio SPIFFS</h1>
+        <p class="sub">Carica e cancella file sul filesystem SPIFFS.</p>
+
+        <div class="row" style="margin:.5rem 0 1rem;">
+          <input id="fileInput" type="file" />
+          <button id="uploadBtn">Upload</button>
+          <a href="/" style="margin-left:auto; align-self:center;">Torna alla Home</a>
+        </div>
+
+        <table>
+          <thead>
+            <tr><th>Nome</th><th class="right">Dimensione</th><th class="right">Azioni</th></tr>
+          </thead>
+          <tbody id="filesBody">
+            <tr><td colspan="3" class="sub">Caricamento elenco...</td></tr>
+          </tbody>
+        </table>
+
+        <p id="status" class="sub" style="margin-top:1rem;">Pronto.</p>
+      </div>
+    </div>
+
+    <script>
+      const filesBody = document.getElementById('filesBody');
+      const statusEl = document.getElementById('status');
+      const fileInput = document.getElementById('fileInput');
+      const uploadBtn = document.getElementById('uploadBtn');
+
+      function parseLs(text) {
+        const lines = text.trim().split(/\n+/).filter(Boolean);
+        const files = [];
+        for (const line of lines) {
+          const [name, sizePart] = line.split(/\t+/);
+          const size = sizePart ? parseInt(sizePart) : 0;
+          if (name && name !== '/' && name !== '.' && name !== '..') files.push({ name, size });
+        }
+        return files;
+      }
+
+      async function loadList() {
+        filesBody.innerHTML = '<tr><td colspan="3" class="sub">Caricamento elenco...</td></tr>';
+        try {
+          const res = await fetch('/ls');
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const txt = await res.text();
+          const files = parseLs(txt);
+          if (!files.length) {
+            filesBody.innerHTML = '<tr><td colspan="3" class="sub">Nessun file presente.</td></tr>';
+            return;
+          }
+          filesBody.innerHTML = '';
+          for (const f of files) {
+            const tr = document.createElement('tr');
+            const tdName = document.createElement('td');
+            const tdSize = document.createElement('td');
+            const tdAct  = document.createElement('td');
+            tdName.textContent = f.name;
+            tdSize.textContent = (isFinite(f.size) ? f.size : 0) + ' B';
+            tdSize.className = 'right';
+            tdAct.className = 'right';
+            const dlLink = document.createElement('a');
+            dlLink.textContent = 'Scarica';
+            dlLink.href = '/api/download?path=' + encodeURIComponent(f.name);
+            dlLink.style.marginRight = '.5rem';
+            const delBtn = document.createElement('button');
+            delBtn.textContent = 'Elimina';
+            delBtn.addEventListener('click', () => delFile(f.name));
+            tdAct.appendChild(dlLink);
+            tdAct.appendChild(delBtn);
+            tr.appendChild(tdName); tr.appendChild(tdSize); tr.appendChild(tdAct);
+            filesBody.appendChild(tr);
+          }
+        } catch (e) {
+          filesBody.innerHTML = '<tr><td colspan="3">Errore: ' + e.message + '</td></tr>';
+        }
+      }
+
+      async function delFile(name) {
+        if (!confirm('Eliminare ' + name + '?')) return;
+        try {
+          const body = new URLSearchParams({ path: name });
+          const res = await fetch('/api/delete', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const j = await res.json();
+          if (j.ok) { statusEl.textContent = 'Eliminato ' + name; loadList(); }
+          else statusEl.textContent = 'Errore eliminazione';
+        } catch (e) {
+          statusEl.textContent = 'Errore: ' + e.message;
+        }
+      }
+
+      async function upload() {
+        const f = fileInput.files[0];
+        if (!f) { alert('Seleziona un file'); return; }
+        try {
+          const fd = new FormData();
+          fd.append('file', f, f.name);
+          const res = await fetch('/upload', { method: 'POST', body: fd });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const j = await res.json();
+          if (j.ok) { statusEl.textContent = 'Upload completato: ' + f.name; fileInput.value = ''; loadList(); }
+          else statusEl.textContent = 'Errore upload';
+        } catch (e) {
+          statusEl.textContent = 'Errore: ' + e.message;
+        }
+      }
+
+      uploadBtn.addEventListener('click', upload);
+      loadList();
+    </script>
+  </body>
+  </html>
