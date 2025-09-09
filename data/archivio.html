@@ -42,6 +42,10 @@
         </table>
 
         <p id="status" class="sub" style="margin-top:1rem;">Pronto.</p>
+
+        <div id="fsStats" class="sub" style="margin-top:.5rem;">
+          SPIFFS: totale —, occupato —, libero —
+        </div>
       </div>
     </div>
 
@@ -50,6 +54,7 @@
       const statusEl = document.getElementById('status');
       const fileInput = document.getElementById('fileInput');
       const uploadBtn = document.getElementById('uploadBtn');
+      const fsStats = document.getElementById('fsStats');
 
       function parseLs(text) {
         const lines = text.trim().split(/\n+/).filter(Boolean);
@@ -62,6 +67,11 @@
         return files;
       }
 
+      function formatN(n) {
+        const num = Number.isFinite(n) ? n : 0;
+        try { return num.toLocaleString('it-IT'); } catch (_) { return String(num); }
+      }
+
       async function loadList() {
         filesBody.innerHTML = '<tr><td colspan="3" class="sub">Caricamento elenco...</td></tr>';
         try {
@@ -71,6 +81,7 @@
           const files = parseLs(txt);
           if (!files.length) {
             filesBody.innerHTML = '<tr><td colspan="3" class="sub">Nessun file presente.</td></tr>';
+            await loadFsInfo();
             return;
           }
           filesBody.innerHTML = '';
@@ -80,7 +91,7 @@
             const tdSize = document.createElement('td');
             const tdAct  = document.createElement('td');
             tdName.textContent = f.name;
-            tdSize.textContent = (isFinite(f.size) ? f.size : 0) + ' B';
+            tdSize.textContent = formatN(isFinite(f.size) ? f.size : 0) + ' B';
             tdSize.className = 'right';
             tdAct.className = 'right';
             const dlLink = document.createElement('a');
@@ -95,8 +106,28 @@
             tr.appendChild(tdName); tr.appendChild(tdSize); tr.appendChild(tdAct);
             filesBody.appendChild(tr);
           }
+          await loadFsInfo();
         } catch (e) {
           filesBody.innerHTML = '<tr><td colspan="3">Errore: ' + e.message + '</td></tr>';
+        }
+      }
+
+      async function loadFsInfo() {
+        try {
+          const res = await fetch('/fsinfo');
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const txt = await res.text();
+          const map = Object.create(null);
+          for (const line of txt.trim().split(/\n+/)) {
+            const [k, v] = line.split('=');
+            if (k && v !== undefined) map[k.trim()] = v.trim();
+          }
+          const total = parseInt(map.totalBytes || '0', 10);
+          const used  = parseInt(map.usedBytes  || '0', 10);
+          const free  = Math.max(total - used, 0);
+          fsStats.textContent = `SPIFFS: totale ${formatN(total)} B, occupato ${formatN(used)} B, libero ${formatN(free)} B`;
+        } catch (e) {
+          fsStats.textContent = 'SPIFFS: errore lettura info (' + e.message + ')';
         }
       }
 
@@ -107,7 +138,7 @@
           const res = await fetch('/api/delete', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
           if (!res.ok) throw new Error('HTTP ' + res.status);
           const j = await res.json();
-          if (j.ok) { statusEl.textContent = 'Eliminato ' + name; loadList(); }
+          if (j.ok) { statusEl.textContent = 'Eliminato ' + name; await loadList(); }
           else statusEl.textContent = 'Errore eliminazione';
         } catch (e) {
           statusEl.textContent = 'Errore: ' + e.message;
@@ -123,7 +154,7 @@
           const res = await fetch('/upload', { method: 'POST', body: fd });
           if (!res.ok) throw new Error('HTTP ' + res.status);
           const j = await res.json();
-          if (j.ok) { statusEl.textContent = 'Upload completato: ' + f.name; fileInput.value = ''; loadList(); }
+          if (j.ok) { statusEl.textContent = 'Upload completato: ' + f.name; fileInput.value = ''; await loadList(); }
           else statusEl.textContent = 'Errore upload';
         } catch (e) {
           statusEl.textContent = 'Errore: ' + e.message;

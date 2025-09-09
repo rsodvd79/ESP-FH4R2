@@ -117,6 +117,28 @@ static void handleRoot() {
   }
 }
 
+static void updateFsTrafficLight() {
+  uint32_t used = fsMounted ? SPIFFS.usedBytes() : 0;
+  uint32_t total = fsMounted ? SPIFFS.totalBytes() : 1; // avoid div by zero
+  uint32_t pct_x100 = (used * 100UL) / (total ? total : 1); // 0..100
+  if (pct_x100 >= 70) {
+    setPixelColor(pixel.Color(255, 0, 0));
+  } else if (pct_x100 >= 50) {
+    setPixelColor(pixel.Color(255, 255, 0));
+  } else {
+    setPixelColor(pixel.Color(0, 255, 0));
+  }
+}
+
+static void handleArchivio() {
+  // Aggiorna LED a semaforo quando si apre la pagina
+  updateFsTrafficLight();
+
+  if (!handleFileRead("/archivio.html")) {
+    server.send(404, "text/plain", "archivio.html non trovato");
+  }
+}
+
 // Upload support
 static File g_uploadFile;
 static String g_uploadName;
@@ -133,10 +155,12 @@ static void handleFileUpload() {
   } else if (upload.status == UPLOAD_FILE_END) {
     if (g_uploadFile) g_uploadFile.close();
     Serial.printf("Upload end: %s (%u bytes)\n", g_uploadName.c_str(), upload.totalSize);
+    updateFsTrafficLight();
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
     Serial.println("Upload aborted");
     if (g_uploadFile) { g_uploadFile.close(); }
     if (!g_uploadName.isEmpty() && SPIFFS.exists(g_uploadName)) SPIFFS.remove(g_uploadName);
+    updateFsTrafficLight();
   }
 }
 
@@ -270,6 +294,7 @@ void setup() {
   // Static file serving handled by handlers below
   server.on("/", HTTP_GET, handleRoot);
   server.on("/index.html", HTTP_GET, handleRoot);
+  server.on("/archivio.html", HTTP_GET, handleArchivio);
   server.on("/ls", HTTP_GET, handleList);
   // File management APIs
   server.on("/api/delete", HTTP_POST, [](){
@@ -279,6 +304,7 @@ void setup() {
     if (!path.startsWith("/")) path = String("/") + path;
     if (!SPIFFS.exists(path)) { server.send(404, "application/json", "{\"ok\":false,\"error\":\"not found\"}"); return; }
     bool ok = SPIFFS.remove(path);
+    updateFsTrafficLight();
     server.send(ok ? 200 : 500, "application/json", ok ? "{\"ok\":true}" : "{\"ok\":false}");
   });
   server.on("/api/download", HTTP_GET, [](){

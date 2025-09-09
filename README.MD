@@ -38,6 +38,13 @@ Nota: “N4R2” indica tipicamente 4 MB di Flash e 2 MB di PSRAM.
 - `data/config.json`: file di configurazione iniziale (usato al primo avvio dopo upload SPIFFS)
 - `data/info.html`: pagina informazioni con visualizzazione di `fsinfo` e `ls`
 - `data/archivio.html`: gestione file su SPIFFS (upload e cancellazione)
+  - Mostra in fondo lo spazio SPIFFS: totale, occupato e libero (usa `/fsinfo`).
+  - Dimensioni con separatori migliaia/milioni per una lettura più chiara.
+  - All'apertura della pagina: LED a semaforo in base all'occupazione SPIFFS:
+    - Verde: basso utilizzo
+    - Giallo: ~50%
+    - Rosso: >70%
+  - Il LED si aggiorna automaticamente dopo upload e cancellazione file.
 - `platformio.ini`: configurazione PlatformIO (env `adafruit_qtpy_esp32s3_n4r2`, SPIFFS, dipendenze)
 
 ## Build e Upload (PlatformIO)
