@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ESP32-S3 - index.html</title>
+    <style>
+      html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+      .wrap { min-height: 100%; display: grid; place-items: center; background: #0f172a; color: #e2e8f0; }
+      .card { padding: 2rem 2.5rem; border-radius: 12px; background: #111827; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+      h1 { margin: 0 0 .25rem; font-size: 1.5rem; }
+      .sub { color: #94a3b8; font-size: .95rem; }
+      code { background: #0b1220; padding: .15rem .35rem; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1>ESP32‑S3 attivo ✅</h1>
+        <p class="sub">Questa è <code>index.html</code> servita da SPIFFS.</p>
+        <p class="sub">Hostname: <code>esp32s3</code></p>
+
+        <hr style="border:none;border-top:1px solid #1f2937;margin:1rem 0;" />
+        <div>
+          <label for="picker">Seleziona colore LED RGB:</label>
+          <input id="picker" type="color" value="#000000" style="margin-left:.5rem; width: 3rem; height: 2rem; border: none; background: transparent;" />
+          <button id="off" style="margin-left:.75rem;">Spegni</button>
+        </div>
+        <p id="status" class="sub" style="margin-top:.75rem;">Pronto.</p>
+
+        <p class="sub" style="margin-top:1rem;">
+          Configurazione rete: <a href="/setup.html" style="color:#60a5fa;">apri setup</a>
+        </p>
+      </div>
+    </div>
+
+    <script>
+      const picker = document.getElementById('picker');
+      const statusEl = document.getElementById('status');
+      const offBtn = document.getElementById('off');
+
+      async function setColor(hex) {
+        try {
+          const p = hex.startsWith('#') ? hex.substring(1) : hex;
+          const res = await fetch(`/color?hex=${p}`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          statusEl.textContent = `Colore impostato: #${data.hex}`;
+        } catch (e) {
+          statusEl.textContent = `Errore: ${e.message}`;
+        }
+      }
+
+      picker.addEventListener('input', (e) => {
+        setColor(e.target.value);
+      });
+
+      offBtn.addEventListener('click', () => setColor('#000000'));
+    </script>
+  </body>
+  </html>

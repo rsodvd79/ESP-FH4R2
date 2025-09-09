@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ESP32-S3 - Setup Rete</title>
+    <style>
+      html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+      .wrap { min-height: 100%; display: grid; place-items: center; background: #0f172a; color: #e2e8f0; }
+      .card { padding: 2rem 2.5rem; border-radius: 12px; background: #111827; box-shadow: 0 10px 30px rgba(0,0,0,.35); width: min(640px, 92vw); }
+      h1 { margin: 0 0 .25rem; font-size: 1.5rem; }
+      .sub { color: #94a3b8; font-size: .95rem; }
+      label { display:block; margin-top: .75rem; font-weight: 600; }
+      input[type="text"], input[type="password"]{ width:100%; box-sizing:border-box; padding:.5rem .6rem; border-radius:8px; border:1px solid #1f2937; background:#0b1220; color:#e2e8f0; }
+      .row { display:grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+      .btns { margin-top: 1rem; display:flex; gap:.75rem; }
+      button { padding:.55rem .9rem; border-radius:8px; border:1px solid #1f2937; background:#1f2937; color:#e5e7eb; cursor:pointer; }
+      a { color:#60a5fa; }
+      .muted { color:#94a3b8; }
+      .hint { font-size:.85rem; color:#94a3b8; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1>Setup di Rete</h1>
+        <p class="sub">Configura SSID, password e IP (DHCP o statico).</p>
+
+        <label>SSID Wi‑Fi</label>
+        <input id="ssid" type="text" placeholder="Nome rete" />
+
+        <label>Password Wi‑Fi</label>
+        <input id="pass" type="password" placeholder="Password" />
+
+        <label style="display:flex;align-items:center;gap:.5rem;margin-top:1rem;">
+          <input id="dhcp" type="checkbox" checked />
+          Usa DHCP
+        </label>
+
+        <div id="staticFields">
+          <div class="row">
+            <div>
+              <label>IP</label>
+              <input id="ip" type="text" placeholder="192.168.1.123" />
+            </div>
+            <div>
+              <label>Maschera</label>
+              <input id="mask" type="text" placeholder="255.255.255.0" />
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label>Gateway</label>
+              <input id="gw" type="text" placeholder="192.168.1.1" />
+            </div>
+            <div>
+              <label>DNS</label>
+              <input id="dns" type="text" placeholder="8.8.8.8" />
+            </div>
+          </div>
+          <p class="hint">Compila questi campi solo se DHCP è disattivato.</p>
+        </div>
+
+        <div class="btns">
+          <button id="save">Salva</button>
+          <button id="reboot">Riavvia</button>
+          <a href="/" style="margin-left:auto; align-self:center;">Torna alla Home</a>
+        </div>
+
+        <p id="status" class="sub" style="margin-top:.75rem;">Caricamento configurazione...</p>
+      </div>
+    </div>
+
+    <script>
+      const el = (id) => document.getElementById(id);
+      const ssid = el('ssid');
+      const pass = el('pass');
+      const dhcp = el('dhcp');
+      const ip   = el('ip');
+      const mask = el('mask');
+      const gw   = el('gw');
+      const dns  = el('dns');
+      const statusEl = el('status');
+      const staticFields = el('staticFields');
+
+      function updateStaticVisibility() {
+        const on = !dhcp.checked;
+        staticFields.style.opacity = on ? '1' : '.5';
+        [ip, mask, gw, dns].forEach(i => i.disabled = !on);
+      }
+      dhcp.addEventListener('change', updateStaticVisibility);
+
+      async function loadConfig() {
+        try {
+          const res = await fetch('/api/get_config');
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const cfg = await res.json();
+          ssid.value = cfg.ssid || '';
+          pass.value = cfg.pass || '';
+          dhcp.checked = !!cfg.dhcp;
+          ip.value   = cfg.ip   || '';
+          mask.value = cfg.mask || '';
+          gw.value   = cfg.gw   || '';
+          dns.value  = cfg.dns  || '';
+          updateStaticVisibility();
+          statusEl.textContent = 'Configurazione caricata.';
+        } catch (e) {
+          statusEl.textContent = 'Errore caricamento config: ' + e.message;
+        }
+      }
+
+      async function saveConfig() {
+        const body = {
+          ssid: ssid.value.trim(),
+          pass: pass.value,
+          dhcp: dhcp.checked,
+          ip:   ip.value.trim(),
+          mask: mask.value.trim(),
+          gw:   gw.value.trim(),
+          dns:  dns.value.trim(),
+        };
+        try {
+          const res = await fetch('/api/save_config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const j = await res.json();
+          if (j.ok) statusEl.textContent = 'Salvato. Puoi riavviare per applicare.';
+          else statusEl.textContent = 'Errore salvataggio.';
+        } catch (e) {
+          statusEl.textContent = 'Errore: ' + e.message;
+        }
+      }
+
+      async function reboot() {
+        try {
+          const res = await fetch('/api/reboot', { method: 'POST' });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          statusEl.textContent = 'Riavvio in corso...';
+        } catch (e) {
+          statusEl.textContent = 'Errore riavvio: ' + e.message;
+        }
+      }
+
+      el('save').addEventListener('click', saveConfig);
+      el('reboot').addEventListener('click', reboot);
+      loadConfig();
+    </script>
+  </body>
+  </html>
+
