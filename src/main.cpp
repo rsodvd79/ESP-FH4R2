@@ -2,6 +2,7 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <SPIFFS.h>
+#include <ESPmDNS.h>
 #include <esp_partition.h>
 #include <Adafruit_NeoPixel.h>
 #include <ArduinoJson.h>
@@ -167,16 +168,14 @@ static void handleFileUpload() {
 static void handleList() {
   String out;
   out.reserve(512);
-  out += "Files in SPIFFS (root):\n";
   File root = SPIFFS.open("/");
   if (!root || !root.isDirectory()) {
     server.send(500, "text/plain", "SPIFFS non montato o root non valido");
     return;
   }
-  File file = root.openNextFile();
-  while (file) {
-    out += String(file.name()) + "\t" + String(file.size()) + " bytes\n";
-    file = root.openNextFile();
+  for (File file = root.openNextFile(); file; file = root.openNextFile()) {
+    if (file.isDirectory()) continue; // ignora eventuali directory
+    out += String(file.name()) + "\t" + String(file.size()) + "\n";
   }
   server.send(200, "text/plain", out);
 }
@@ -275,11 +274,20 @@ void setup() {
     Serial.print("Hostname: ");
     Serial.println(WiFi.getHostname());
 
+    // Start mDNS so the device is reachable as esp32s3.local
+    if (!MDNS.begin(WIFI_HOST)) {
+      Serial.println("mDNS start fallito");
+    } else {
+      MDNS.addService("http", "tcp", 80);
+      Serial.println("mDNS attivo: http://esp32s3.local/");
+    }
+
     // Turn off LED after connection (end of startup)
     setPixelColor(pixel.Color(0, 0, 0));
   } else {
     // Access Point mode (setup)
     WiFi.mode(WIFI_AP);
+    WiFi.softAPsetHostname(WIFI_HOST);
     const char* AP_SSID = "ESP-FH4R2-Setup";
     const char* AP_PASS = "12345678"; // minimo 8 caratteri per WPA2
     bool ok = WiFi.softAP(AP_SSID, AP_PASS);

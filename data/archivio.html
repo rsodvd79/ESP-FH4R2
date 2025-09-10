@@ -57,12 +57,14 @@
       const fsStats = document.getElementById('fsStats');
 
       function parseLs(text) {
-        const lines = text.trim().split(/\n+/).filter(Boolean);
         const files = [];
-        for (const line of lines) {
-          const [name, sizePart] = line.split(/\t+/);
-          const size = sizePart ? parseInt(sizePart) : 0;
-          if (name && name !== '/' && name !== '.' && name !== '..') files.push({ name, size });
+        for (const raw of text.trim().split(/\n+/)) {
+          const line = raw.trim();
+          if (!line || line.indexOf('\t') === -1) continue; // ignora intestazioni o righe non valide
+          const [name, sizePart = '0'] = line.split(/\t+/);
+          if (!name || name === '/' || name === '.' || name === '..') continue;
+          const size = parseInt(String(sizePart), 10);
+          files.push({ name, size: Number.isFinite(size) ? size : 0 });
         }
         return files;
       }
